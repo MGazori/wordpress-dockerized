@@ -48,3 +48,16 @@ if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROT
  * End Custom MGazori Config
 */
 ```
+
+## Disable wordpress cronjob
+For better performance you can disable wordpress cronjob and run it yourself with crontab.
+
+Add this to wp-config.php
+```
+define('DISABLE_WP_CRON', true);
+```
+
+And create cronjob by this. (15 minutes is fine, but you can modify it by your need!)
+```
+*/15 * * * * docker exec -it CONTAINER_NAME php /var/www/wp-cron.php >/dev/null 2>&1
+```
