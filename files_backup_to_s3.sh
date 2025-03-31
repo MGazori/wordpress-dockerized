@@ -108,3 +108,50 @@ echo "S3 path: s3://${S3_BACKUP_STORAGE_BUCKET}/${S3_PATH}"
 # Clean up temporary backup file
 rm -f "${BACKUP_PATH}"
 echo "Temporary backup file removed."
+
+# Handle backup retention
+echo "Managing backup retention..."
+
+# Set default retention if not defined
+if [ -z "$FILES_BACKUP_RETENTION" ]; then
+  FILES_BACKUP_RETENTION=10
+  echo "FILES_BACKUP_RETENTION not set, using default value: 10"
+fi
+
+# List all file backups in S3, sorted by date (oldest first)
+echo "Listing existing backups..."
+BACKUP_LIST=$(aws --endpoint-url="${S3_BACKUP_STORAGE_ENDPOINT}" \
+  s3 ls "s3://${S3_BACKUP_STORAGE_BUCKET}/backups/files/" --recursive | \
+  grep '\.tar\.bz2$' | sort)
+
+# Count total backups
+BACKUP_COUNT=$(echo "$BACKUP_LIST" | wc -l)
+echo "Found $BACKUP_COUNT existing backups"
+
+# Calculate how many backups to delete
+DELETE_COUNT=$((BACKUP_COUNT - FILES_BACKUP_RETENTION))
+
+if [ $DELETE_COUNT -gt 0 ]; then
+  echo "Removing $DELETE_COUNT old backups to maintain retention policy of $FILES_BACKUP_RETENTION backups..."
+  
+  # Get the list of backups to delete (oldest first)
+  BACKUPS_TO_DELETE=$(echo "$BACKUP_LIST" | head -n $DELETE_COUNT)
+  
+  # Delete each old backup
+  while read -r BACKUP_LINE; do
+    # Extract the S3 path from the listing
+    BACKUP_PATH=$(echo "$BACKUP_LINE" | awk '{print $4}')
+    echo "Deleting old backup: $BACKUP_PATH"
+    
+    aws --endpoint-url="${S3_BACKUP_STORAGE_ENDPOINT}" \
+      s3 rm "s3://${S3_BACKUP_STORAGE_BUCKET}/$BACKUP_PATH"
+      
+    if [ $? -ne 0 ]; then
+      echo "Warning: Failed to delete backup $BACKUP_PATH"
+    fi
+  done <<< "$BACKUPS_TO_DELETE"
+  
+  echo "Completed cleanup of old backups"
+else
+  echo "No backups need to be deleted (current count: $BACKUP_COUNT, retention: $FILES_BACKUP_RETENTION)"
+fi
